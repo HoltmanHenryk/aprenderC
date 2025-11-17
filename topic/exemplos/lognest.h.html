@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>~/Dev/lognest/lognest.h.html</title>
+<meta name="Generator" content="Vim/9.1">
+<meta name="plugin-version" content="vim9.0_v2">
+<meta name="syntax" content="c">
+<meta name="settings" content="use_css,no_foldcolumn,expand_tabs,pre_wrap,prevent_copy=,use_input_for_pc=none">
+<meta name="colorscheme" content="GruberDarker">
+<style>
+<!--
+pre { white-space: pre-wrap; font-family: monospace; color: #dadada; background-color: #121212; }
+body { font-family: monospace; color: #dadada; background-color: #121212; }
+* { font-size: 1em; }
+a { color: inherit; }
+.Statement { color: #ffd700; }
+.PreProc { color: #e4e4e4; }
+.Type { color: #87af87; }
+.Include { color: #ffd700; }
+.Todo { color: #121212; background-color: #ffd700; padding-bottom: 1px; }
+.Macro { color: #dadada; }
+.level15c { color: #af5f00; }
+.level16c { color: #0000c0; }
+.SpecialChar { color: #ffd700; }
+.level14c { color: #ff6060; }
+.Number { color: #87af87; }
+.Comment { color: #d78700; }
+.Constant { color: #87af87; }
+.String { color: #5faf00; }
+.StorageClass { color: #ffd700; }
+.Structure { color: #ffd700; }
+.Conditional { color: #ffd700; }
+-->
+</style>
+</head>
+<body>
+<pre id='vimCodeElement'>
+<span class="Comment">/*</span><span class="Comment"> Copyright 2025 LeaoMartelo2 (<a href="https://github.com/LeaoMartelo2)">https://github.com/LeaoMartelo2)</a></span>
+
+<span class="Comment">Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:</span>
+
+<span class="Comment">The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.</span>
+
+<span class="Comment">THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. </span><span class="Comment">*/</span>
+
+<span class="PreProc">#ifndef LOGNEST_H_</span>
+<span class="Macro">#define LOGNEST_H_</span>
+
+<span class="Macro">#define LOGNEST_VERSION </span><span class="String">&quot;2.1.6&quot;</span>
+
+<span class="Include">#include </span><span class="String">&lt;stdarg.h&gt;</span>
+<span class="Include">#include </span><span class="String">&lt;stdio.h&gt;</span>
+<span class="Include">#include </span><span class="String">&lt;stdlib.h&gt;</span>
+<span class="Include">#include </span><span class="String">&lt;string.h&gt;</span>
+<span class="Include">#include </span><span class="String">&lt;time.h&gt;</span>
+
+<span class="PreProc">#ifdef __cplusplus</span>
+<span class="StorageClass">extern</span> <span class="String">&quot;C&quot;</span> <span class="level16c">{</span>
+<span class="PreProc">#endif</span> <span class="Comment">// __cplusplus</span>
+
+<span class="Comment">/*</span><span class="Comment"> If LOGNEST_FILE is not defined before the include, default to latest.log at the execution path </span><span class="Comment">*/</span>
+<span class="PreProc">#ifndef LOGNEST_FILE</span>
+<span class="Macro">#define LOGNEST_FILE </span><span class="String">&quot;latest.log&quot;</span>
+<span class="PreProc">#endif</span> <span class="Comment">// LOGNEST_FILE</span>
+
+<span class="PreProc">#ifndef LOGNEST_API</span>
+<span class="Macro">#define LOGNEST_API  </span>
+<span class="PreProc">#endif</span> <span class="Comment">// LOGNEST_API</span>
+
+<span class="Comment">// @LOG PREFIXEX</span>
+
+<span class="PreProc">#ifndef LOGNEST_TRACE_PREFIX</span>
+<span class="Macro">#define LOGNEST_TRACE_PREFIX </span><span class="String">&quot;[LOG]  &quot;</span>
+<span class="PreProc">#endif</span> <span class="Comment">// LOGNEST_TRACE_PREFIX</span>
+
+<span class="PreProc">#ifndef LOGNEST_WARN_PREFIX</span>
+<span class="Macro">#define LOGNEST_WARN_PREFIX </span><span class="String">&quot;[WARN]&quot;</span>
+<span class="PreProc">#endif</span> <span class="Comment">// LOGNEST_WARN_PREFIX</span>
+
+<span class="PreProc">#ifndef LOGNEST_ERROR_PREFIX</span>
+<span class="Macro">#define LOGNEST_ERROR_PREFIX </span><span class="String">&quot;[ERROR]&quot;</span>
+<span class="PreProc">#endif</span> <span class="Comment">// LOGNEST_ERROR_PREFIX</span>
+
+<span class="PreProc">#ifndef LOGNEST_DEBUG_PREFIX</span>
+<span class="Macro">#define LOGNEST_DEBUG_PREFIX </span><span class="String">&quot;[DEBUG]&quot;</span>
+<span class="PreProc">#endif</span> <span class="Comment">// LOGNEST_DEBUG_PREFIX</span>
+
+<span class="Comment">// @FUNCTION_REPLACES</span>
+
+<span class="PreProc">#ifndef LOGNEST_ABORT</span>
+<span class="Macro">#define LOGNEST_ABORT</span><span class="level16c">()</span><span class="Macro"> abort</span><span class="level16c">()</span>
+<span class="PreProc">#endif</span>
+
+<span class="Macro">#define LN_TIMESTAMP_BUFFER_MAX_SIZE </span><span class="Number">2048</span>
+
+LOGNEST_API <span class="Type">void</span> _lognest_trace_raw<span class="level15c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *file, <span class="StorageClass">const</span> <span class="Type">char</span> *format, ...<span class="level15c">)</span>;
+LOGNEST_API <span class="Type">void</span> _lognest_warn_raw<span class="level15c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *file, <span class="StorageClass">const</span> <span class="Type">char</span> *format, ...<span class="level15c">)</span>;
+LOGNEST_API <span class="Type">void</span> _lognest_error_raw<span class="level15c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *file, <span class="StorageClass">const</span> <span class="Type">char</span> *format, ...<span class="level15c">)</span>;
+LOGNEST_API <span class="Type">void</span> _lognest_debug_raw<span class="level15c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *file, <span class="StorageClass">const</span> <span class="Type">char</span> *format, ...<span class="level15c">)</span>;
+
+<span class="Macro">#define lognest_trace</span><span class="level16c">(</span>...<span class="level16c">)</span><span class="Macro"> _lognest_trace_raw</span><span class="level16c">(</span>LOGNEST_FILE, <span class="Constant">__VA_ARGS__</span><span class="level16c">)</span>
+<span class="Macro">#define lognest_warn</span><span class="level16c">(</span>...<span class="level16c">)</span><span class="Macro"> _lognest_warn_raw</span><span class="level16c">(</span>LOGNEST_FILE, <span class="Constant">__VA_ARGS__</span><span class="level16c">)</span>
+<span class="Macro">#define lognest_error</span><span class="level16c">(</span>...<span class="level16c">)</span><span class="Macro"> _lognest_error_raw</span><span class="level16c">(</span>LOGNEST_FILE, <span class="Constant">__VA_ARGS__</span><span class="level16c">)</span>
+<span class="Macro">#define lognest_debug</span><span class="level16c">(</span>...<span class="level16c">)</span><span class="Macro"> _lognest_debug_raw</span><span class="level16c">(</span>LOGNEST_FILE, <span class="Constant">__VA_ARGS__</span><span class="level16c">)</span>
+
+LOGNEST_API <span class="Type">void</span> lognest_to_file<span class="level15c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *file, <span class="StorageClass">const</span> <span class="Type">char</span> *level, <span class="StorageClass">const</span> <span class="Type">char</span> *format, <span class="Type">va_list</span> args<span class="level15c">)</span>;
+
+LOGNEST_API <span class="Type">void</span> _lognest_get_timestamp<span class="level15c">(</span><span class="Type">char</span> *buffer, <span class="Type">size_t</span> len<span class="level15c">)</span>;
+LOGNEST_API <span class="Type">void</span> _lognest_get_datestamp<span class="level15c">(</span><span class="Type">char</span> *buffer, <span class="Type">size_t</span> len<span class="level15c">)</span>;
+
+<span class="PreProc">#ifdef __cplusplus</span>
+<span class="level16c">}</span>
+<span class="PreProc">#endif</span> <span class="Comment">// __cplusplus</span>
+
+<span class="Comment">// TESTING DEFINE </span>
+<span class="Comment">// DO NOT FORGET TO COMMENT THIS OUT BEFORE MERGING ON MAIN</span>
+<span class="Comment">// @IMPORTANT @RELEASE @</span><span class="Todo">TODO</span>
+<span class="Comment">//#define LOGNEST_IMPLEMENTATION</span>
+
+<span class="PreProc">#ifdef LOGNEST_IMPLEMENTATION</span>
+
+LOGNEST_API <span class="Type">void</span> _lognest_get_timestamp<span class="level16c">(</span><span class="Type">char</span> *buffer, <span class="Type">size_t</span> len<span class="level16c">)</span> <span class="level16c">{</span>
+
+    <span class="Conditional">if</span> <span class="level15c">(</span>buffer == <span class="Constant">NULL</span> || len &gt; LN_TIMESTAMP_BUFFER_MAX_SIZE<span class="level15c">)</span> <span class="level15c">{</span>
+        <span class="Comment">// just to make sure, 2kb for a date is way too much</span>
+        fprintf<span class="level14c">(</span><span class="Constant">stderr</span>, <span class="String">&quot;LogNest: timestamp buffer, was too small</span><span class="SpecialChar">\n</span><span class="String">&quot;</span><span class="level14c">)</span>;
+
+<span class="PreProc">#ifdef LOGNEST_ALLOW_CRASH</span>
+        LOGNEST_ABORT<span class="level14c">()</span>;
+<span class="PreProc">#endif</span>
+
+        <span class="Statement">return</span>;
+    <span class="level15c">}</span>
+
+    <span class="Type">time_t</span> now = time<span class="level15c">(</span><span class="Constant">NULL</span><span class="level15c">)</span>;
+    <span class="Structure">struct</span> tm *t = localtime<span class="level15c">(</span>&amp;now<span class="level15c">)</span>;
+
+    <span class="Conditional">if</span> <span class="level15c">(</span>t == <span class="Constant">NULL</span><span class="level15c">)</span> <span class="level15c">{</span>
+        fprintf<span class="level14c">(</span><span class="Constant">stderr</span>, <span class="String">&quot;LogNest: failed to get localtime[timestamp]</span><span class="SpecialChar">\n</span><span class="String">&quot;</span><span class="level14c">)</span>;
+
+<span class="PreProc">#ifdef LOGNEST_ALLOW_CRASH</span>
+        LOGNEST_ABORT<span class="level14c">()</span>;
+<span class="PreProc">#endif</span>
+
+        <span class="Statement">return</span>;
+    <span class="level15c">}</span>
+
+    strftime<span class="level15c">(</span>buffer, len, <span class="String">&quot;[%H:%M:</span><span class="SpecialChar">%S</span><span class="String">]&quot;</span>, t<span class="level15c">)</span>;
+<span class="level16c">}</span>
+
+LOGNEST_API <span class="Type">void</span> _lognest_get_datestamp<span class="level16c">(</span><span class="Type">char</span> *buffer, <span class="Type">size_t</span> len<span class="level16c">)</span> <span class="level16c">{</span>
+
+    <span class="Conditional">if</span> <span class="level15c">(</span>buffer == <span class="Constant">NULL</span> || len &gt; LN_TIMESTAMP_BUFFER_MAX_SIZE<span class="level15c">)</span> <span class="level15c">{</span>
+        <span class="Comment">// ditto</span>
+        fprintf<span class="level14c">(</span><span class="Constant">stderr</span>, <span class="String">&quot;LogNest: timestamp buffer, was too small</span><span class="SpecialChar">\n</span><span class="String">&quot;</span><span class="level14c">)</span>;
+
+<span class="PreProc">#ifdef LOGNEST_ALLOW_CRASH</span>
+        LOGNEST_ABORT<span class="level14c">()</span>;
+<span class="PreProc">#endif</span>
+        <span class="Statement">return</span>;
+    <span class="level15c">}</span>
+
+    <span class="Type">time_t</span> now = time<span class="level15c">(</span><span class="Constant">NULL</span><span class="level15c">)</span>;
+    <span class="Structure">struct</span> tm *t = localtime<span class="level15c">(</span>&amp;now<span class="level15c">)</span>;
+
+    <span class="Conditional">if</span> <span class="level15c">(</span>t == <span class="Constant">NULL</span><span class="level15c">)</span> <span class="level15c">{</span>
+        fprintf<span class="level14c">(</span><span class="Constant">stderr</span>, <span class="String">&quot;LogNest: failed to get localtime[datestamp]</span><span class="SpecialChar">\n</span><span class="String">&quot;</span><span class="level14c">)</span>;
+
+<span class="PreProc">#ifdef LOGNEST_ALLOW_CRASH</span>
+        LOGNEST_ABORT<span class="level14c">()</span>;
+<span class="PreProc">#endif</span>
+
+        <span class="Statement">return</span>;
+    <span class="level15c">}</span>
+
+    strftime<span class="level15c">(</span>buffer, len, <span class="String">&quot;[%y/%m/</span><span class="SpecialChar">%d</span><span class="String">]&quot;</span>, t<span class="level15c">)</span>;
+<span class="level16c">}</span>
+
+LOGNEST_API <span class="Type">void</span> lognest_to_file<span class="level16c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *file, <span class="StorageClass">const</span> <span class="Type">char</span> *level, <span class="StorageClass">const</span> <span class="Type">char</span> *format, <span class="Type">va_list</span> args<span class="level16c">)</span> <span class="level16c">{</span>
+
+    <span class="Conditional">if</span> <span class="level15c">(</span>file == <span class="Constant">NULL</span><span class="level15c">)</span> <span class="level15c">{</span>
+        fprintf<span class="level14c">(</span><span class="Constant">stderr</span>, <span class="String">&quot;LogNest @ lognest_to_file: unexpected filename: </span><span class="SpecialChar">%s</span><span class="SpecialChar">\n</span><span class="String">&quot;</span>, file<span class="level14c">)</span>;
+
+<span class="PreProc">#ifdef LOGNEST_ALLOW_CRASH</span>
+        LOGNEST_ABORT<span class="level14c">()</span>;
+<span class="PreProc">#endif</span>
+
+        <span class="Statement">return</span>;
+    <span class="level15c">}</span>
+
+    <span class="Type">FILE</span> *log_file = fopen<span class="level15c">(</span>file, <span class="String">&quot;a&quot;</span><span class="level15c">)</span>;
+    <span class="Conditional">if</span> <span class="level15c">(</span>log_file == <span class="Constant">NULL</span><span class="level15c">)</span> <span class="level15c">{</span>
+        fprintf<span class="level14c">(</span><span class="Constant">stderr</span>, <span class="String">&quot;LogNest: error trying to open file, filename: '</span><span class="SpecialChar">%s</span><span class="String">'</span><span class="SpecialChar">\n</span><span class="String">&quot;</span>, file<span class="level14c">)</span>;
+
+<span class="PreProc">#ifdef LOGNEST_ALLOW_CRASH</span>
+        LOGNEST_ABORT<span class="level14c">()</span>;
+<span class="PreProc">#endif</span>
+
+        <span class="Statement">return</span>;
+    <span class="level15c">}</span>
+
+    <span class="Comment">/*</span><span class="Comment"> disabled datestamp </span><span class="Comment">*/</span>
+<span class="PreProc">#ifndef LOGNEST_DISABLE_DATESTAMP</span>
+
+    <span class="Type">char</span> datestamp<span class="level15c">[</span>LN_TIMESTAMP_BUFFER_MAX_SIZE<span class="level15c">]</span> = <span class="level15c">{</span><span class="Number">0</span><span class="level15c">}</span>;
+    _lognest_get_datestamp<span class="level15c">(</span>datestamp, LN_TIMESTAMP_BUFFER_MAX_SIZE<span class="level15c">)</span>;
+
+    fprintf<span class="level15c">(</span>log_file, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, datestamp<span class="level15c">)</span>;
+
+<span class="PreProc">#endif</span> <span class="Comment">// !LOGNEST_DISABLE_DATESTAMP</span>
+
+    <span class="Comment">/*</span><span class="Comment"> disabled timestamp </span><span class="Comment">*/</span>
+<span class="PreProc">#ifndef LOGNEST_DISABLE_TIMESTAMP</span>
+
+    <span class="Type">char</span> timestamp<span class="level15c">[</span>LN_TIMESTAMP_BUFFER_MAX_SIZE<span class="level15c">]</span> = <span class="level15c">{</span><span class="Number">0</span><span class="level15c">}</span>;
+    _lognest_get_timestamp<span class="level15c">(</span>timestamp, LN_TIMESTAMP_BUFFER_MAX_SIZE<span class="level15c">)</span>;
+
+    fprintf<span class="level15c">(</span>log_file, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, timestamp<span class="level15c">)</span>;
+
+<span class="PreProc">#endif</span> <span class="Comment">// !LOGNEST_DISABLE_TIMESTAMP</span>
+
+    fprintf<span class="level15c">(</span>log_file, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">: &quot;</span>, level<span class="level15c">)</span>;
+
+    vfprintf<span class="level15c">(</span>log_file, format, args<span class="level15c">)</span>;
+
+    fprintf<span class="level15c">(</span>log_file, <span class="String">&quot;</span><span class="SpecialChar">\n</span><span class="String">&quot;</span><span class="level15c">)</span>;
+
+    fclose<span class="level15c">(</span>log_file<span class="level15c">)</span>;
+<span class="level16c">}</span>
+
+LOGNEST_API <span class="Type">void</span> _lognest_trace_raw<span class="level16c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *file, <span class="StorageClass">const</span> <span class="Type">char</span> *format, ...<span class="level16c">)</span> <span class="level16c">{</span>
+
+<span class="PreProc">#ifdef LOGNEST_DISABLE_TRACE</span>
+    <span class="Statement">return</span>;
+<span class="PreProc">#endif</span> <span class="Comment">// LOGNEST_DISABLE_TRACE</span>
+
+    <span class="Type">va_list</span> args;
+    va_start<span class="level15c">(</span>args, format<span class="level15c">)</span>;
+    lognest_to_file<span class="level15c">(</span>file, LOGNEST_TRACE_PREFIX, format, args<span class="level15c">)</span>;
+
+    va_end<span class="level15c">(</span>args<span class="level15c">)</span>;
+<span class="level16c">}</span>
+
+LOGNEST_API <span class="Type">void</span> _lognest_warn_raw<span class="level16c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *file, <span class="StorageClass">const</span> <span class="Type">char</span> *format, ...<span class="level16c">)</span> <span class="level16c">{</span>
+
+<span class="PreProc">#ifdef LOGNEST_DISABLE_WARN</span>
+    <span class="Statement">return</span>;
+<span class="PreProc">#endif</span> <span class="Comment">// LOGNEST_DISABLE_WARN</span>
+
+    <span class="Type">va_list</span> args;
+    va_start<span class="level15c">(</span>args, format<span class="level15c">)</span>;
+    lognest_to_file<span class="level15c">(</span>file, LOGNEST_WARN_PREFIX, format, args<span class="level15c">)</span>;
+
+    va_end<span class="level15c">(</span>args<span class="level15c">)</span>;
+<span class="level16c">}</span>
+
+LOGNEST_API <span class="Type">void</span> _lognest_error_raw<span class="level16c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *file, <span class="StorageClass">const</span> <span class="Type">char</span> *format, ...<span class="level16c">)</span> <span class="level16c">{</span>
+
+<span class="PreProc">#ifdef LOGNEST_DISABLE_ERROR</span>
+    <span class="Statement">return</span>;
+<span class="PreProc">#endif</span> <span class="Comment">// LOGNEST_DISABLE_ERROR</span>
+
+    <span class="Type">va_list</span> args;
+    va_start<span class="level15c">(</span>args, format<span class="level15c">)</span>;
+    lognest_to_file<span class="level15c">(</span>file, LOGNEST_WARN_PREFIX, format, args<span class="level15c">)</span>;
+
+    va_end<span class="level15c">(</span>args<span class="level15c">)</span>;
+<span class="level16c">}</span>
+
+LOGNEST_API <span class="Type">void</span> _lognest_debug_raw<span class="level16c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *file, <span class="StorageClass">const</span> <span class="Type">char</span> *format, ...<span class="level16c">)</span> <span class="level16c">{</span>
+
+<span class="PreProc">#ifdef LOGNEST_DISABLE_DEBUG</span>
+    <span class="Statement">return</span>;
+<span class="PreProc">#endif</span> <span class="Comment">// LOGNEST_DISABLE_DEBUG</span>
+
+    <span class="Type">va_list</span> args;
+    va_start<span class="level15c">(</span>args, format<span class="level15c">)</span>;
+    lognest_to_file<span class="level15c">(</span>file, LOGNEST_DEBUG_PREFIX, format, args<span class="level15c">)</span>;
+
+    va_end<span class="level15c">(</span>args<span class="level15c">)</span>;
+<span class="level16c">}</span>
+
+<span class="PreProc">#endif</span> <span class="Comment">// LOGNEST_IMPLEMENTATION</span>
+
+<span class="PreProc">#endif</span> <span class="Comment">// !LOGNEST_H_</span>
+</pre>
+</body>
+</html>
+<!-- vim: set foldmethod=manual : -->

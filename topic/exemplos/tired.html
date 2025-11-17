@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>~/Dev/tired/src/main.c.html</title>
+<meta name="Generator" content="Vim/9.1">
+<meta name="plugin-version" content="vim9.0_v2">
+<meta name="syntax" content="c">
+<meta name="settings" content="use_css,no_foldcolumn,expand_tabs,pre_wrap,prevent_copy=,use_input_for_pc=none">
+<meta name="colorscheme" content="GruberDarker">
+<style>
+<!--
+pre { white-space: pre-wrap; font-family: monospace; color: #dadada; background-color: #121212; }
+body { font-family: monospace; color: #dadada; background-color: #121212; }
+* { font-size: 1em; }
+a { color: inherit; }
+.level11c { color: #008000; }
+.Statement { color: #ffd700; }
+.Type { color: #87af87; }
+.Include { color: #ffd700; }
+.SpecialChar { color: #ffd700; }
+.level12c { color: #008080; }
+.level13c { color: #c00000; }
+.String { color: #5faf00; }
+.level15c { color: #af5f00; }
+.level16c { color: #0000c0; }
+.Character { color: #5faf00; }
+.level14c { color: #ff6060; }
+.StorageClass { color: #ffd700; }
+.Comment { color: #d78700; }
+.Constant { color: #87af87; }
+.Macro { color: #dadada; }
+.Number { color: #87af87; }
+.Structure { color: #ffd700; }
+.Conditional { color: #ffd700; }
+.Repeat { color: #ffd700; }
+.Label { color: #dadada; }
+.level9c { color: #c000c0; }
+.level10c { color: #0000c0; }
+.Operator { color: #dadada; }
+-->
+</style>
+</head>
+<body>
+<pre id='vimCodeElement'>
+<span class="Comment">/*</span><span class="Comment"> Copyright 2025 Henryk Szenkowicz Holtman</span>
+
+<span class="Comment">    Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files(the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and / or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions :</span>
+
+<span class="Comment">    The above copyright notice and this permission notice shall be included in all copies</span>
+<span class="Comment">    or</span>
+<span class="Comment">    substantial portions of the Software.</span>
+
+<span class="Comment">    THE SOFTWARE IS PROVIDED “AS IS”,</span>
+<span class="Comment">    WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</span>
+<span class="Comment">*/</span>
+
+<span class="Include">#include </span><span class="String">&quot;config.h&quot;</span>
+<span class="Include">#include </span><span class="String">&lt;ctype.h&gt;</span>
+<span class="Include">#include </span><span class="String">&lt;fcntl.h&gt;</span>
+<span class="Include">#include </span><span class="String">&lt;ncurses.h&gt;</span>
+<span class="Include">#include </span><span class="String">&lt;stdio.h&gt;</span>
+<span class="Include">#include </span><span class="String">&lt;stdlib.h&gt;</span>
+<span class="Include">#include </span><span class="String">&lt;string.h&gt;</span>
+<span class="Include">#include </span><span class="String">&lt;sys/stat.h&gt;</span>
+<span class="Include">#include </span><span class="String">&lt;unistd.h&gt;</span>
+
+<span class="Macro">#define key_ctrl</span><span class="level16c">(</span>x<span class="level16c">)</span><span class="Macro"> </span><span class="level16c">(</span><span class="level15c">(</span>x<span class="level15c">)</span> &amp; <span class="Number">0x1f</span><span class="level16c">)</span>
+
+<span class="Comment">/*</span><span class="Comment"> window and buffer sizes </span><span class="Comment">*/</span>
+<span class="Macro">#define LAST_ACTION_SIZE </span><span class="Number">2048</span>
+<span class="Macro">#define PROMPT_WIN_HEIGHT </span><span class="Number">10</span>
+<span class="Macro">#define PROMPT_WIN_WIDTH </span><span class="Number">80</span>
+<span class="Macro">#define MSG_WIN_HEIGHT </span><span class="Number">5</span>
+<span class="Macro">#define MSG_WIN_WIDTH </span><span class="Number">60</span>
+
+<span class="Macro">#define MAX_LINE </span><span class="Number">2048</span>
+<span class="Macro">#define INFO_BAR_PADDING </span><span class="Number">20</span>
+<span class="Macro">#define ENTRIES_PER_PAGE </span><span class="Number">20</span>
+
+<span class="Structure">typedef</span> <span class="Structure">enum</span> <span class="level16c">{</span>
+    file_reg,
+    file_dir,
+    file_exec,
+    file_link,
+<span class="level16c">}</span> file_type;
+
+<span class="Structure">typedef</span> <span class="Structure">struct</span> ls_entry <span class="level16c">{</span>
+    <span class="Type">char</span> *full_line;
+    <span class="Type">char</span> *prefix;
+    <span class="Type">char</span> *fname;
+    file_type type;
+<span class="level16c">}</span> ls_entry;
+
+<span class="Type">void</span> trim_newline<span class="level16c">(</span><span class="Type">char</span> *s<span class="level16c">)</span>;
+<span class="Type">void</span> trim_executable_mark<span class="level16c">(</span><span class="Type">char</span> *s<span class="level16c">)</span>;
+<span class="Type">int</span> parse_ls_line<span class="level16c">(</span><span class="Type">char</span> *line, ls_entry *entry<span class="level16c">)</span>;
+<span class="Type">int</span> load_ls_entries<span class="level16c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *path, ls_entry ***entries_out<span class="level16c">)</span>;
+<span class="Type">void</span> free_ls_entry<span class="level16c">(</span>ls_entry *entry<span class="level16c">)</span>;
+<span class="Type">void</span> free_ls_entries<span class="level16c">(</span>ls_entry **entries, <span class="Type">int</span> count<span class="level16c">)</span>;
+<span class="StorageClass">const</span> <span class="Type">char</span> *file_type_str<span class="level16c">(</span><span class="Type">int</span> type<span class="level16c">)</span>;
+<span class="Type">void</span> show_help<span class="level16c">(</span><span class="Type">void</span><span class="level16c">)</span>;
+<span class="Type">int</span> confirm_box<span class="level16c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *msg<span class="level16c">)</span>;
+<span class="Type">int</span> prompt_input<span class="level16c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *prompt, <span class="Type">char</span> *buffer, <span class="Type">int</span> buf_size<span class="level16c">)</span>;
+<span class="Type">void</span> show_message<span class="level16c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *msg<span class="level16c">)</span>;
+<span class="Type">void</span> run_executable<span class="level16c">(</span><span class="Type">char</span> *file_path<span class="level16c">)</span>;
+<span class="Type">void</span> run_silent<span class="level16c">(</span><span class="Type">char</span> *file_path<span class="level16c">)</span>;
+
+<span class="StorageClass">static</span> <span class="Type">char</span> last_action<span class="level16c">[</span>LAST_ACTION_SIZE<span class="level16c">]</span> = <span class="String">&quot;&quot;</span>;
+
+<span class="Type">void</span> trim_newline<span class="level16c">(</span><span class="Type">char</span> *s<span class="level16c">)</span> <span class="level16c">{</span>
+    <span class="Type">char</span> *p = strchr<span class="level15c">(</span>s, <span class="SpecialChar">'\n'</span><span class="level15c">)</span>;
+    <span class="Conditional">if</span> <span class="level15c">(</span>p<span class="level15c">)</span> <span class="level15c">{</span>
+        *p = <span class="SpecialChar">'\0'</span>;
+    <span class="level15c">}</span>
+<span class="level16c">}</span>
+
+<span class="Type">void</span> trim_executable_mark<span class="level16c">(</span><span class="Type">char</span> *s<span class="level16c">)</span> <span class="level16c">{</span>
+    <span class="Type">char</span> *p = strchr<span class="level15c">(</span>s, <span class="Character">'*'</span><span class="level15c">)</span>;
+    <span class="Conditional">if</span> <span class="level15c">(</span>p<span class="level15c">)</span> <span class="level15c">{</span>
+        *p = <span class="SpecialChar">'\0'</span>;
+    <span class="level15c">}</span>
+<span class="level16c">}</span>
+
+<span class="Type">int</span> parse_ls_line<span class="level16c">(</span><span class="Type">char</span> *line, ls_entry *entry<span class="level16c">)</span> <span class="level16c">{</span>
+
+    entry-&gt;full_line = strdup<span class="level15c">(</span>line<span class="level15c">)</span>;
+
+    <span class="Type">char</span> perm<span class="level15c">[</span><span class="Number">32</span><span class="level15c">]</span>, links<span class="level15c">[</span><span class="Number">32</span><span class="level15c">]</span>, owner<span class="level15c">[</span><span class="Number">64</span><span class="level15c">]</span>, group<span class="level15c">[</span><span class="Number">64</span><span class="level15c">]</span>, size<span class="level15c">[</span><span class="Number">64</span><span class="level15c">]</span>, month<span class="level15c">[</span><span class="Number">32</span><span class="level15c">]</span>, day<span class="level15c">[</span><span class="Number">32</span><span class="level15c">]</span>, time_year<span class="level15c">[</span><span class="Number">32</span><span class="level15c">]</span>;
+    <span class="Type">int</span> offset = <span class="Number">0</span>;
+    <span class="Type">int</span> n = sscanf<span class="level15c">(</span>line, <span class="String">&quot;</span><span class="SpecialChar">%31s</span><span class="String"> </span><span class="SpecialChar">%31s</span><span class="String"> </span><span class="SpecialChar">%63s</span><span class="String"> </span><span class="SpecialChar">%63s</span><span class="String"> </span><span class="SpecialChar">%63s</span><span class="String"> </span><span class="SpecialChar">%31s</span><span class="String"> </span><span class="SpecialChar">%31s</span><span class="String"> </span><span class="SpecialChar">%31s</span><span class="String"> </span><span class="SpecialChar">%n</span><span class="String">&quot;</span>,
+                   perm, links, owner, group, size, month, day, time_year, &amp;offset<span class="level15c">)</span>;
+    <span class="Conditional">if</span> <span class="level15c">(</span>n &lt; <span class="Number">8</span><span class="level15c">)</span> <span class="level15c">{</span>
+        <span class="Statement">return</span> -<span class="Number">1</span>;
+    <span class="level15c">}</span>
+
+    <span class="Repeat">while</span> <span class="level15c">(</span>line<span class="level14c">[</span>offset<span class="level14c">]</span> &amp;&amp; isspace<span class="level14c">(</span><span class="level13c">(</span><span class="Type">unsigned</span> <span class="Type">char</span><span class="level13c">)</span>line<span class="level13c">[</span>offset<span class="level13c">]</span><span class="level14c">)</span><span class="level15c">)</span> <span class="level15c">{</span>
+        offset++;
+    <span class="level15c">}</span>
+
+    entry-&gt;fname = strdup<span class="level15c">(</span>line + offset<span class="level15c">)</span>;
+
+    <span class="Type">int</span> prefix_len = offset;
+
+    entry-&gt;prefix = malloc<span class="level15c">(</span>prefix_len + <span class="Number">1</span><span class="level15c">)</span>;
+
+    strncpy<span class="level15c">(</span>entry-&gt;prefix, line, prefix_len<span class="level15c">)</span>;
+
+    entry-&gt;prefix<span class="level15c">[</span>prefix_len<span class="level15c">]</span> = <span class="SpecialChar">'\0'</span>;
+
+    <span class="Conditional">if</span> <span class="level15c">(</span>perm<span class="level14c">[</span><span class="Number">0</span><span class="level14c">]</span> == <span class="Character">'d'</span><span class="level15c">)</span> <span class="level15c">{</span>
+
+        entry-&gt;type = file_dir;
+
+    <span class="level15c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level15c">(</span>perm<span class="level14c">[</span><span class="Number">0</span><span class="level14c">]</span> == <span class="Character">'l'</span><span class="level15c">)</span> <span class="level15c">{</span>
+
+        entry-&gt;type = file_link;
+
+    <span class="level15c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level15c">(</span>perm<span class="level14c">[</span><span class="Number">0</span><span class="level14c">]</span> == <span class="Character">'-'</span> &amp;&amp; strchr<span class="level14c">(</span>perm, <span class="Character">'x'</span><span class="level14c">)</span> != <span class="Constant">NULL</span><span class="level15c">)</span> <span class="level15c">{</span>
+
+        entry-&gt;type = file_exec;
+
+    <span class="level15c">}</span> <span class="Conditional">else</span> <span class="level15c">{</span>
+
+        entry-&gt;type = file_reg;
+    <span class="level15c">}</span>
+
+    <span class="Statement">return</span> <span class="Number">0</span>;
+<span class="level16c">}</span>
+
+<span class="Type">int</span> load_ls_entries<span class="level16c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *path, ls_entry ***entries_out<span class="level16c">)</span> <span class="level16c">{</span>
+
+    <span class="Type">char</span> command<span class="level15c">[</span><span class="Number">256</span><span class="level15c">]</span>;
+
+    <span class="Type">int</span> ret = snprintf<span class="level15c">(</span>command, <span class="Operator">sizeof</span><span class="level14c">(</span>command<span class="level14c">)</span>, LS_COMMAND <span class="String">&quot; </span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, path<span class="level15c">)</span>;
+
+    <span class="Conditional">if</span> <span class="level15c">(</span>ret &lt; <span class="Number">0</span> || <span class="level14c">(</span><span class="Type">size_t</span><span class="level14c">)</span>ret &gt;= <span class="Operator">sizeof</span><span class="level14c">(</span>command<span class="level14c">)</span><span class="level15c">)</span> <span class="level15c">{</span>
+
+        fprintf<span class="level14c">(</span><span class="Constant">stderr</span>, <span class="String">&quot;Command buffer too small.</span><span class="SpecialChar">\n</span><span class="String">&quot;</span><span class="level14c">)</span>;
+        <span class="Statement">return</span> -<span class="Number">1</span>;
+    <span class="level15c">}</span>
+
+    <span class="Type">FILE</span> *fp = popen<span class="level15c">(</span>command, <span class="String">&quot;r&quot;</span><span class="level15c">)</span>;
+    <span class="Conditional">if</span> <span class="level15c">(</span>!fp<span class="level15c">)</span> <span class="level15c">{</span>
+        <span class="Statement">return</span> -<span class="Number">1</span>;
+    <span class="level15c">}</span>
+
+    ls_entry **entries = <span class="Constant">NULL</span>;
+    <span class="Type">int</span> capacity = <span class="Number">20</span>, count = <span class="Number">0</span>;
+
+    entries = malloc<span class="level15c">(</span>capacity * <span class="Operator">sizeof</span><span class="level14c">(</span>ls_entry *<span class="level14c">)</span><span class="level15c">)</span>;
+    <span class="Type">char</span> line<span class="level15c">[</span>MAX_LINE<span class="level15c">]</span>;
+
+    <span class="Comment">/*</span><span class="Comment"> skip the &quot;total&quot; line. </span><span class="Comment">*/</span>
+    <span class="Conditional">if</span> <span class="level15c">(</span>fgets<span class="level14c">(</span>line, <span class="Operator">sizeof</span><span class="level13c">(</span>line<span class="level13c">)</span>, fp<span class="level14c">)</span> != <span class="Constant">NULL</span><span class="level15c">)</span> <span class="level15c">{</span>
+
+        <span class="Conditional">if</span> <span class="level14c">(</span>strncmp<span class="level13c">(</span>line, <span class="String">&quot;total&quot;</span>, <span class="Number">5</span><span class="level13c">)</span> != <span class="Number">0</span><span class="level14c">)</span> <span class="level14c">{</span>
+
+            trim_newline<span class="level13c">(</span>line<span class="level13c">)</span>;
+            ls_entry *entry = malloc<span class="level13c">(</span><span class="Operator">sizeof</span><span class="level12c">(</span>ls_entry<span class="level12c">)</span><span class="level13c">)</span>;
+            <span class="Conditional">if</span> <span class="level13c">(</span>parse_ls_line<span class="level12c">(</span>line, entry<span class="level12c">)</span> == <span class="Number">0</span><span class="level13c">)</span> <span class="level13c">{</span>
+
+                entries<span class="level12c">[</span>count++<span class="level12c">]</span> = entry;
+
+            <span class="level13c">}</span> <span class="Conditional">else</span> <span class="level13c">{</span>
+
+                free<span class="level12c">(</span>entry<span class="level12c">)</span>;
+            <span class="level13c">}</span>
+        <span class="level14c">}</span>
+    <span class="level15c">}</span>
+
+    <span class="Repeat">while</span> <span class="level15c">(</span>fgets<span class="level14c">(</span>line, <span class="Operator">sizeof</span><span class="level13c">(</span>line<span class="level13c">)</span>, fp<span class="level14c">)</span> != <span class="Constant">NULL</span><span class="level15c">)</span> <span class="level15c">{</span>
+
+        trim_newline<span class="level14c">(</span>line<span class="level14c">)</span>;
+        <span class="Conditional">if</span> <span class="level14c">(</span>strlen<span class="level13c">(</span>line<span class="level13c">)</span> == <span class="Number">0</span><span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Statement">continue</span>;
+        <span class="level14c">}</span>
+        <span class="Conditional">if</span> <span class="level14c">(</span>count &gt;= capacity<span class="level14c">)</span> <span class="level14c">{</span>
+
+            capacity *= <span class="Number">2</span>;
+            entries = realloc<span class="level13c">(</span>entries, capacity * <span class="Operator">sizeof</span><span class="level12c">(</span>ls_entry *<span class="level12c">)</span><span class="level13c">)</span>;
+        <span class="level14c">}</span>
+
+        ls_entry *entry = malloc<span class="level14c">(</span><span class="Operator">sizeof</span><span class="level13c">(</span>ls_entry<span class="level13c">)</span><span class="level14c">)</span>;
+
+        <span class="Conditional">if</span> <span class="level14c">(</span>parse_ls_line<span class="level13c">(</span>line, entry<span class="level13c">)</span> == <span class="Number">0</span><span class="level14c">)</span> <span class="level14c">{</span>
+
+            entries<span class="level13c">[</span>count++<span class="level13c">]</span> = entry;
+
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="level14c">{</span>
+
+            free<span class="level13c">(</span>entry<span class="level13c">)</span>;
+        <span class="level14c">}</span>
+    <span class="level15c">}</span>
+
+    pclose<span class="level15c">(</span>fp<span class="level15c">)</span>;
+    *entries_out = entries;
+    <span class="Statement">return</span> count;
+<span class="level16c">}</span>
+
+<span class="Type">void</span> free_ls_entry<span class="level16c">(</span>ls_entry *entry<span class="level16c">)</span> <span class="level16c">{</span>
+
+    <span class="Conditional">if</span> <span class="level15c">(</span>entry<span class="level15c">)</span> <span class="level15c">{</span>
+
+        free<span class="level14c">(</span>entry-&gt;full_line<span class="level14c">)</span>;
+        free<span class="level14c">(</span>entry-&gt;prefix<span class="level14c">)</span>;
+        free<span class="level14c">(</span>entry-&gt;fname<span class="level14c">)</span>;
+        free<span class="level14c">(</span>entry<span class="level14c">)</span>;
+    <span class="level15c">}</span>
+<span class="level16c">}</span>
+
+<span class="Type">void</span> free_ls_entries<span class="level16c">(</span>ls_entry **entries, <span class="Type">int</span> count<span class="level16c">)</span> <span class="level16c">{</span>
+
+    <span class="Repeat">for</span> <span class="level15c">(</span><span class="Type">int</span> i = <span class="Number">0</span>; i &lt; count; i++<span class="level15c">)</span> <span class="level15c">{</span>
+
+        free_ls_entry<span class="level14c">(</span>entries<span class="level13c">[</span>i<span class="level13c">]</span><span class="level14c">)</span>;
+    <span class="level15c">}</span>
+
+    free<span class="level15c">(</span>entries<span class="level15c">)</span>;
+<span class="level16c">}</span>
+
+<span class="StorageClass">const</span> <span class="Type">char</span> *file_type_str<span class="level16c">(</span><span class="Type">int</span> type<span class="level16c">)</span> <span class="level16c">{</span>
+
+    <span class="Conditional">switch</span> <span class="level15c">(</span>type<span class="level15c">)</span> <span class="level15c">{</span>
+
+    <span class="Label">case</span> file_dir:
+        <span class="Statement">return</span> <span class="String">&quot;DIRECTORY&quot;</span>;
+        <span class="Statement">break</span>;
+
+    <span class="Label">case</span> file_exec:
+        <span class="Statement">return</span> <span class="String">&quot;EXECUTABLE&quot;</span>;
+        <span class="Statement">break</span>;
+
+    <span class="Label">case</span> file_link:
+        <span class="Statement">return</span> <span class="String">&quot;SYMLINK&quot;</span>;
+        <span class="Statement">break</span>;
+
+    <span class="Label">default</span>:
+        <span class="Statement">return</span> <span class="String">&quot;REGULAR&quot;</span>;
+    <span class="level15c">}</span>
+<span class="level16c">}</span>
+
+<span class="Type">void</span> show_help<span class="level16c">(</span><span class="Type">void</span><span class="level16c">)</span> <span class="level16c">{</span>
+
+    clear<span class="level15c">()</span>;
+
+    mvprintw<span class="level15c">(</span><span class="Number">1</span>, <span class="Number">2</span>, <span class="String">&quot;Key Bindings:&quot;</span><span class="level15c">)</span>;
+
+    mvprintw<span class="level15c">(</span><span class="Number">3</span>, <span class="Number">4</span>, <span class="String">&quot;</span><span class="SpecialChar">%c</span><span class="String">        : Jump to a line&quot;</span>, KEY_JUMP<span class="level15c">)</span>;
+    mvprintw<span class="level15c">(</span><span class="Number">4</span>, <span class="Number">4</span>, <span class="String">&quot;</span><span class="SpecialChar">%c</span><span class="String">        : Next page&quot;</span>, KEY_NEXT_PAGE<span class="level15c">)</span>;
+    mvprintw<span class="level15c">(</span><span class="Number">5</span>, <span class="Number">4</span>, <span class="String">&quot;</span><span class="SpecialChar">%c</span><span class="String">        : Previous page&quot;</span>, KEY_PREV_PAGE<span class="level15c">)</span>;
+    mvprintw<span class="level15c">(</span><span class="Number">6</span>, <span class="Number">4</span>, <span class="String">&quot;</span><span class="SpecialChar">%c</span><span class="String">        : Rename file&quot;</span>, KEY_RENAME_2<span class="level15c">)</span>;
+    mvprintw<span class="level15c">(</span><span class="Number">7</span>, <span class="Number">4</span>, <span class="String">&quot;</span><span class="SpecialChar">%c</span><span class="String">        : Delete file&quot;</span>, KEY_DELETE_2<span class="level15c">)</span>;
+    mvprintw<span class="level15c">(</span><span class="Number">8</span>, <span class="Number">4</span>, <span class="String">&quot;</span><span class="SpecialChar">%c</span><span class="String">        : Search file&quot;</span>, KEY_SEARCH_1<span class="level15c">)</span>;
+
+    mvprintw<span class="level15c">(</span><span class="Number">10</span>, <span class="Number">4</span>, <span class="String">&quot;</span><span class="SpecialChar">%c</span><span class="String">        : Run command&quot;</span>, KEY_RUN_CMD<span class="level15c">)</span>;
+    mvprintw<span class="level15c">(</span><span class="Number">11</span>, <span class="Number">4</span>, <span class="String">&quot;</span><span class="SpecialChar">%c</span><span class="String">        : mkdir&quot;</span>, KEY_MKDIR<span class="level15c">)</span>;
+    mvprintw<span class="level15c">(</span><span class="Number">12</span>, <span class="Number">4</span>, <span class="String">&quot;</span><span class="SpecialChar">%c</span><span class="String">        : create file&quot;</span>, KEY_TOUCH<span class="level15c">)</span>;
+    mvprintw<span class="level15c">(</span><span class="Number">13</span>, <span class="Number">4</span>, <span class="String">&quot;</span><span class="SpecialChar">%c</span><span class="String">        : open in a new terminal&quot;</span>, KEY_TERM_OPEN<span class="level15c">)</span>;
+    mvprintw<span class="level15c">(</span><span class="Number">14</span>, <span class="Number">4</span>, <span class="String">&quot;</span><span class="SpecialChar">%c</span><span class="String">        : open location in a new terminal window&quot;</span>, KEY_OPEN_LOCATION<span class="level15c">)</span>;
+    mvprintw<span class="level15c">(</span><span class="Number">15</span>, <span class="Number">4</span>, <span class="String">&quot;</span><span class="SpecialChar">%c</span><span class="String">        : Show help&quot;</span>, KEY_SHOW_HELP<span class="level15c">)</span>;
+    mvprintw<span class="level15c">(</span><span class="Number">16</span>, <span class="Number">4</span>, <span class="String">&quot;</span><span class="SpecialChar">%c</span><span class="String">        : Quit&quot;</span>, KEY_QUIT<span class="level15c">)</span>;
+
+    mvprintw<span class="level15c">(</span>LINES - <span class="Number">2</span>, <span class="Number">2</span>, <span class="String">&quot;Press any key to return.&quot;</span><span class="level15c">)</span>;
+
+    refresh<span class="level15c">()</span>;
+    getch<span class="level15c">()</span>;
+<span class="level16c">}</span>
+
+<span class="Type">int</span> confirm_box<span class="level16c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *msg<span class="level16c">)</span> <span class="level16c">{</span>
+
+    <span class="Type">int</span> height = <span class="Number">10</span>, width = <span class="Number">60</span>;
+    <span class="Type">int</span> starty = <span class="level15c">(</span>LINES - height<span class="level15c">)</span> / <span class="Number">2</span>, startx = <span class="level15c">(</span>COLS - width<span class="level15c">)</span> / <span class="Number">2</span>;
+
+    WINDOW *win = newwin<span class="level15c">(</span>height, width, starty, startx<span class="level15c">)</span>;
+    box<span class="level15c">(</span>win, <span class="Number">0</span>, <span class="Number">0</span><span class="level15c">)</span>;
+
+    mvwprintw<span class="level15c">(</span>win, <span class="Number">2</span>, <span class="Number">2</span>, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String"> (y/n)&quot;</span>, msg<span class="level15c">)</span>;
+
+    wrefresh<span class="level15c">(</span>win<span class="level15c">)</span>;
+    <span class="Type">int</span> ch, confirmed = <span class="Number">0</span>;
+
+    <span class="Repeat">while</span> <span class="level15c">(</span><span class="level14c">(</span>ch = wgetch<span class="level13c">(</span>win<span class="level13c">)</span><span class="level14c">)</span><span class="level15c">)</span> <span class="level15c">{</span>
+
+        <span class="Conditional">if</span> <span class="level14c">(</span>ch == <span class="Character">'y'</span> || ch == <span class="Character">'Y'</span><span class="level14c">)</span> <span class="level14c">{</span>
+
+            confirmed = <span class="Number">1</span>;
+            <span class="Statement">break</span>;
+
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == <span class="Character">'n'</span> || ch == <span class="Character">'N'</span><span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Statement">break</span>;
+        <span class="level14c">}</span>
+    <span class="level15c">}</span>
+
+    delwin<span class="level15c">(</span>win<span class="level15c">)</span>;
+    <span class="Statement">return</span> confirmed;
+<span class="level16c">}</span>
+
+<span class="Type">void</span> show_message<span class="level16c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *msg<span class="level16c">)</span> <span class="level16c">{</span>
+
+    <span class="Type">int</span> height = MSG_WIN_HEIGHT, width = MSG_WIN_WIDTH;
+    <span class="Type">int</span> starty = <span class="level15c">(</span>LINES - height<span class="level15c">)</span> / <span class="Number">2</span>, startx = <span class="level15c">(</span>COLS - width<span class="level15c">)</span> / <span class="Number">2</span>;
+
+    WINDOW *win = newwin<span class="level15c">(</span>height, width, starty, startx<span class="level15c">)</span>;
+    box<span class="level15c">(</span>win, <span class="Number">0</span>, <span class="Number">0</span><span class="level15c">)</span>;
+
+    mvwprintw<span class="level15c">(</span>win, <span class="Number">2</span>, <span class="Number">2</span>, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, msg<span class="level15c">)</span>;
+
+    wrefresh<span class="level15c">(</span>win<span class="level15c">)</span>;
+    wgetch<span class="level15c">(</span>win<span class="level15c">)</span>;
+    delwin<span class="level15c">(</span>win<span class="level15c">)</span>;
+<span class="level16c">}</span>
+
+<span class="Type">int</span> prompt_input<span class="level16c">(</span><span class="StorageClass">const</span> <span class="Type">char</span> *prompt, <span class="Type">char</span> *buffer, <span class="Type">int</span> buf_size<span class="level16c">)</span> <span class="level16c">{</span>
+
+    <span class="Type">int</span> height = PROMPT_WIN_HEIGHT, width = PROMPT_WIN_WIDTH;
+    <span class="Type">int</span> starty = <span class="level15c">(</span>LINES - height<span class="level15c">)</span> / <span class="Number">2</span>, startx = <span class="level15c">(</span>COLS - width<span class="level15c">)</span> / <span class="Number">2</span>;
+
+    WINDOW *win = newwin<span class="level15c">(</span>height, width, starty, startx<span class="level15c">)</span>;
+    box<span class="level15c">(</span>win, <span class="Number">0</span>, <span class="Number">0</span><span class="level15c">)</span>;
+
+    mvwprintw<span class="level15c">(</span>win, <span class="Number">1</span>, <span class="Number">2</span>, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, prompt<span class="level15c">)</span>;
+    mvwprintw<span class="level15c">(</span>win, <span class="Number">3</span>, <span class="Number">2</span>, <span class="String">&quot;Entry: &quot;</span><span class="level15c">)</span>;
+
+    wrefresh<span class="level15c">(</span>win<span class="level15c">)</span>;
+    curs_set<span class="level15c">(</span><span class="Number">1</span><span class="level15c">)</span>;
+
+    <span class="Type">int</span> ch, pos = <span class="Number">0</span>;
+
+    memset<span class="level15c">(</span>buffer, <span class="Number">0</span>, buf_size<span class="level15c">)</span>;
+
+    <span class="Repeat">while</span> <span class="level15c">(</span><span class="Number">1</span><span class="level15c">)</span> <span class="level15c">{</span>
+
+        ch = wgetch<span class="level14c">(</span>win<span class="level14c">)</span>;
+        <span class="Conditional">if</span> <span class="level14c">(</span>ch == <span class="Number">27</span><span class="level14c">)</span> <span class="level14c">{</span> <span class="Comment">/*</span><span class="Comment"> ESC cancels input </span><span class="Comment">*/</span>
+
+            buffer<span class="level13c">[</span><span class="Number">0</span><span class="level13c">]</span> = <span class="SpecialChar">'\0'</span>;
+            <span class="Statement">break</span>;
+
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == <span class="SpecialChar">'\n'</span><span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Statement">break</span>;
+
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_BACKSPACE || ch == <span class="Number">127</span><span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>pos &gt; <span class="Number">0</span><span class="level13c">)</span> <span class="level13c">{</span>
+
+                pos--;
+                buffer<span class="level12c">[</span>pos<span class="level12c">]</span> = <span class="SpecialChar">'\0'</span>;
+                mvwprintw<span class="level12c">(</span>win, <span class="Number">3</span>, <span class="Number">12</span>, <span class="String">&quot;</span><span class="SpecialChar">%-*s</span><span class="String">&quot;</span>, buf_size - <span class="Number">12</span>, <span class="String">&quot; &quot;</span><span class="level12c">)</span>;
+                mvwprintw<span class="level12c">(</span>win, <span class="Number">3</span>, <span class="Number">12</span>, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, buffer<span class="level12c">)</span>;
+                box<span class="level12c">(</span>win, <span class="Number">0</span>, <span class="Number">0</span><span class="level12c">)</span>;
+                wrefresh<span class="level12c">(</span>win<span class="level12c">)</span>;
+            <span class="level13c">}</span>
+
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>pos &lt; buf_size - <span class="Number">1</span> &amp;&amp; isprint<span class="level13c">(</span>ch<span class="level13c">)</span><span class="level14c">)</span> <span class="level14c">{</span>
+
+            buffer<span class="level13c">[</span>pos++<span class="level13c">]</span> = ch;
+            buffer<span class="level13c">[</span>pos<span class="level13c">]</span> = <span class="SpecialChar">'\0'</span>;
+            mvwprintw<span class="level13c">(</span>win, <span class="Number">3</span>, <span class="Number">12</span>, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, buffer<span class="level13c">)</span>;
+            wrefresh<span class="level13c">(</span>win<span class="level13c">)</span>;
+        <span class="level14c">}</span>
+    <span class="level15c">}</span>
+    curs_set<span class="level15c">(</span><span class="Number">0</span><span class="level15c">)</span>;
+    delwin<span class="level15c">(</span>win<span class="level15c">)</span>;
+    <span class="Statement">return</span> <span class="Number">0</span>;
+<span class="level16c">}</span>
+
+<span class="Type">void</span> run_executable<span class="level16c">(</span><span class="Type">char</span> *file_path<span class="level16c">)</span> <span class="level16c">{</span>
+
+    <span class="Conditional">if</span> <span class="level15c">(</span>confirm_box<span class="level14c">(</span><span class="String">&quot;Open this file?&quot;</span><span class="level14c">)</span><span class="level15c">)</span> <span class="level15c">{</span>
+
+        clear<span class="level14c">()</span>;
+        refresh<span class="level14c">()</span>;
+        endwin<span class="level14c">()</span>; <span class="Comment">/*</span><span class="Comment"> exit ncurses mode temporarily </span><span class="Comment">*/</span>
+
+        trim_executable_mark<span class="level14c">(</span>file_path<span class="level14c">)</span>;
+
+        printf<span class="level14c">(</span><span class="String">&quot;Running: </span><span class="SpecialChar">%s</span><span class="SpecialChar">\n</span><span class="String">&quot;</span>, file_path<span class="level14c">)</span>;
+        <span class="Type">int</span> status = system<span class="level14c">(</span>file_path<span class="level14c">)</span>;
+        printf<span class="level14c">(</span><span class="String">&quot;Process exited with status </span><span class="SpecialChar">%d</span><span class="SpecialChar">\n</span><span class="String">&quot;</span>, status<span class="level14c">)</span>;
+        printf<span class="level14c">(</span><span class="String">&quot;Press Enter to return...</span><span class="SpecialChar">\n</span><span class="String">&quot;</span><span class="level14c">)</span>;
+
+        getchar<span class="level14c">()</span>;
+        initscr<span class="level14c">()</span>; <span class="Comment">/*</span><span class="Comment"> restore ncurses mode </span><span class="Comment">*/</span>
+        cbreak<span class="level14c">()</span>;
+        noecho<span class="level14c">()</span>;
+        keypad<span class="level14c">(</span>stdscr, TRUE<span class="level14c">)</span>;
+        curs_set<span class="level14c">(</span><span class="Number">0</span><span class="level14c">)</span>;
+    <span class="level15c">}</span>
+<span class="level16c">}</span>
+
+<span class="Type">void</span> run_silent<span class="level16c">(</span><span class="Type">char</span> *file_path<span class="level16c">)</span> <span class="level16c">{</span>
+
+    trim_executable_mark<span class="level15c">(</span>file_path<span class="level15c">)</span>;
+    system<span class="level15c">(</span>file_path<span class="level15c">)</span>;
+<span class="level16c">}</span>
+
+<span class="Type">int</span> main<span class="level16c">(</span><span class="Type">void</span><span class="level16c">)</span> <span class="level16c">{</span>
+
+    <span class="Type">char</span> current_path<span class="level15c">[</span><span class="Number">1024</span><span class="level15c">]</span> = <span class="String">&quot;.&quot;</span>;
+    <span class="Type">int</span> ch, selected = <span class="Number">0</span>, page = <span class="Number">0</span>;
+    <span class="Type">int</span> num_entries = <span class="Number">0</span>;
+    ls_entry **entries = <span class="Constant">NULL</span>;
+
+    initscr<span class="level15c">()</span>;
+    cbreak<span class="level15c">()</span>;
+    noecho<span class="level15c">()</span>;
+    keypad<span class="level15c">(</span>stdscr, TRUE<span class="level15c">)</span>;
+    curs_set<span class="level15c">(</span><span class="Number">0</span><span class="level15c">)</span>;
+    start_color<span class="level15c">()</span>;
+    use_default_colors<span class="level15c">()</span>;
+    init_pair<span class="level15c">(</span><span class="Number">1</span>, COLOR_DIRECTORY, COLOR_BLACK<span class="level15c">)</span>;
+    init_pair<span class="level15c">(</span><span class="Number">2</span>, COLOR_EXECUTABLE, COLOR_BLACK<span class="level15c">)</span>;
+    init_pair<span class="level15c">(</span><span class="Number">3</span>, COLOR_REGULAR, COLOR_BLACK<span class="level15c">)</span>;
+    init_pair<span class="level15c">(</span><span class="Number">4</span>, COLOR_SYMLINK, COLOR_BLACK<span class="level15c">)</span>;
+
+    num_entries = load_ls_entries<span class="level15c">(</span>current_path, &amp;entries<span class="level15c">)</span>;
+    <span class="Conditional">if</span> <span class="level15c">(</span>num_entries &lt; <span class="Number">0</span><span class="level15c">)</span> <span class="level15c">{</span>
+
+        endwin<span class="level14c">()</span>;
+        fprintf<span class="level14c">(</span><span class="Constant">stderr</span>, <span class="String">&quot;Failed to load directory entries.</span><span class="SpecialChar">\n</span><span class="String">&quot;</span><span class="level14c">)</span>;
+        exit<span class="level14c">(</span><span class="Constant">EXIT_FAILURE</span><span class="level14c">)</span>;
+    <span class="level15c">}</span>
+
+    <span class="Repeat">while</span> <span class="level15c">(</span><span class="Number">1</span><span class="level15c">)</span> <span class="level15c">{</span>
+
+        clear<span class="level14c">()</span>;
+        <span class="Comment">/*</span><span class="Comment"> display last action message at the top </span><span class="Comment">*/</span>
+        mvprintw<span class="level14c">(</span><span class="Number">0</span>, <span class="Number">0</span>, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, last_action<span class="level14c">)</span>;
+
+        <span class="Type">int</span> total_pages = <span class="level14c">(</span>num_entries + ENTRIES_PER_PAGE - <span class="Number">1</span><span class="level14c">)</span> / ENTRIES_PER_PAGE;
+        <span class="Type">int</span> start_index = page * ENTRIES_PER_PAGE;
+        <span class="Type">int</span> end_index = start_index + ENTRIES_PER_PAGE;
+
+        <span class="Conditional">if</span> <span class="level14c">(</span>end_index &gt; num_entries<span class="level14c">)</span> <span class="level14c">{</span>
+
+            end_index = num_entries;
+        <span class="level14c">}</span>
+
+        <span class="Repeat">for</span> <span class="level14c">(</span><span class="Type">int</span> i = start_index; i &lt; end_index; i++<span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>i == selected<span class="level13c">)</span> <span class="level13c">{</span>
+
+                attron<span class="level12c">(</span>A_REVERSE<span class="level12c">)</span>;
+            <span class="level13c">}</span>
+
+            mvprintw<span class="level13c">(</span>i - start_index + <span class="Number">1</span>, <span class="Number">0</span>, <span class="String">&quot;[</span><span class="SpecialChar">%2d</span><span class="String">]&quot;</span>, i<span class="level13c">)</span>;
+            <span class="Type">int</span> col = <span class="Number">4</span> + snprintf<span class="level13c">(</span><span class="Constant">NULL</span>, <span class="Number">0</span>, <span class="String">&quot;[</span><span class="SpecialChar">%2d</span><span class="String">]&quot;</span>, i<span class="level13c">)</span>;
+            mvprintw<span class="level13c">(</span>i - start_index + <span class="Number">1</span>, col, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, entries<span class="level12c">[</span>i<span class="level12c">]</span>-&gt;prefix<span class="level13c">)</span>;
+            col += strlen<span class="level13c">(</span>entries<span class="level12c">[</span>i<span class="level12c">]</span>-&gt;prefix<span class="level13c">)</span>;
+
+            <span class="Conditional">switch</span> <span class="level13c">(</span>entries<span class="level12c">[</span>i<span class="level12c">]</span>-&gt;type<span class="level13c">)</span> <span class="level13c">{</span>
+
+            <span class="Label">case</span> file_dir: <span class="level12c">{</span>
+                attron<span class="level11c">(</span>COLOR_PAIR<span class="level10c">(</span><span class="Number">1</span><span class="level10c">)</span><span class="level11c">)</span>;
+                <span class="Statement">break</span>;
+            <span class="level12c">}</span>
+
+            <span class="Label">case</span> file_exec: <span class="level12c">{</span>
+                attron<span class="level11c">(</span>COLOR_PAIR<span class="level10c">(</span><span class="Number">2</span><span class="level10c">)</span><span class="level11c">)</span>;
+                <span class="Statement">break</span>;
+            <span class="level12c">}</span>
+
+            <span class="Label">case</span> file_link: <span class="level12c">{</span>
+                attron<span class="level11c">(</span>COLOR_PAIR<span class="level10c">(</span><span class="Number">4</span><span class="level10c">)</span><span class="level11c">)</span>;
+                <span class="Statement">break</span>;
+            <span class="level12c">}</span>
+
+            <span class="Label">default</span>: <span class="level12c">{</span>
+                attron<span class="level11c">(</span>COLOR_PAIR<span class="level10c">(</span><span class="Number">3</span><span class="level10c">)</span><span class="level11c">)</span>;
+                <span class="Statement">break</span>;
+            <span class="level12c">}</span>
+            <span class="level13c">}</span>
+
+            mvprintw<span class="level13c">(</span>i - start_index + <span class="Number">1</span>, col, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, entries<span class="level12c">[</span>i<span class="level12c">]</span>-&gt;fname<span class="level13c">)</span>;
+            attroff<span class="level13c">(</span>COLOR_PAIR<span class="level12c">(</span><span class="Number">1</span><span class="level12c">)</span><span class="level13c">)</span>;
+            attroff<span class="level13c">(</span>COLOR_PAIR<span class="level12c">(</span><span class="Number">2</span><span class="level12c">)</span><span class="level13c">)</span>;
+            attroff<span class="level13c">(</span>COLOR_PAIR<span class="level12c">(</span><span class="Number">3</span><span class="level12c">)</span><span class="level13c">)</span>;
+            attroff<span class="level13c">(</span>COLOR_PAIR<span class="level12c">(</span><span class="Number">4</span><span class="level12c">)</span><span class="level13c">)</span>;
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>i == selected<span class="level13c">)</span> <span class="level13c">{</span>
+
+                attroff<span class="level12c">(</span>A_REVERSE<span class="level12c">)</span>;
+            <span class="level13c">}</span>
+        <span class="level14c">}</span>
+
+        <span class="Type">char</span> info_bar<span class="level14c">[</span><span class="Number">100</span><span class="level14c">]</span>;
+        <span class="Type">int</span> ret = snprintf<span class="level14c">(</span>info_bar, <span class="Operator">sizeof</span><span class="level13c">(</span>info_bar<span class="level13c">)</span>, <span class="String">&quot;INFO: </span><span class="SpecialChar">%-*s</span><span class="String"> | Page (</span><span class="SpecialChar">%d</span><span class="String">/</span><span class="SpecialChar">%d</span><span class="String">)&quot;</span>,
+                           INFO_BAR_PADDING, file_type_str<span class="level13c">(</span>entries<span class="level12c">[</span>selected<span class="level12c">]</span>-&gt;type<span class="level13c">)</span>,
+                           page + <span class="Number">1</span>, total_pages<span class="level14c">)</span>;
+        <span class="Conditional">if</span> <span class="level14c">(</span>ret &lt; <span class="Number">0</span> || <span class="level13c">(</span><span class="Type">size_t</span><span class="level13c">)</span>ret &gt;= <span class="Operator">sizeof</span><span class="level13c">(</span>info_bar<span class="level13c">)</span><span class="level14c">)</span> <span class="level14c">{</span>
+            info_bar<span class="level13c">[</span><span class="Operator">sizeof</span><span class="level12c">(</span>info_bar<span class="level12c">)</span> - <span class="Number">1</span><span class="level13c">]</span> = <span class="SpecialChar">'\0'</span>;
+        <span class="level14c">}</span>
+        mvprintw<span class="level14c">(</span>LINES - <span class="Number">2</span>, <span class="Number">0</span>, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, info_bar<span class="level14c">)</span>;
+        mvprintw<span class="level14c">(</span>LINES - <span class="Number">1</span>, <span class="Number">0</span>, <span class="String">&quot;q: Quit | h: Help | r: Rename | d: Delete | n: Next | p: Prev &quot;</span>
+                               <span class="String">&quot;| m: mkdir | t: touch | x: Run Command | z: Run in a new window&quot;</span><span class="level14c">)</span>;
+        refresh<span class="level14c">()</span>;
+
+        ch = getch<span class="level14c">()</span>;
+
+        <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_QUIT<span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>confirm_box<span class="level12c">(</span><span class="String">&quot;Are you sure you want to quit?&quot;</span><span class="level12c">)</span><span class="level13c">)</span> <span class="level13c">{</span>
+                <span class="Statement">break</span>;
+            <span class="level13c">}</span>
+
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_UP &amp;&amp; selected &gt; <span class="Number">0</span><span class="level14c">)</span> <span class="level14c">{</span>
+
+            selected--;
+            <span class="Conditional">if</span> <span class="level13c">(</span>selected &lt; start_index<span class="level13c">)</span> <span class="level13c">{</span>
+                page--;
+            <span class="level13c">}</span>
+
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_DOWN &amp;&amp; selected &lt; num_entries - <span class="Number">1</span><span class="level14c">)</span> <span class="level14c">{</span>
+
+            selected++;
+            <span class="Conditional">if</span> <span class="level13c">(</span>selected &gt;= end_index<span class="level13c">)</span> <span class="level13c">{</span>
+                page++;
+            <span class="level13c">}</span>
+
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_NEXT_PAGE<span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>page &lt; total_pages - <span class="Number">1</span><span class="level13c">)</span> <span class="level13c">{</span>
+
+                page++;
+                selected = page * ENTRIES_PER_PAGE;
+            <span class="level13c">}</span>
+
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_PREV_PAGE<span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>page &gt; <span class="Number">0</span><span class="level13c">)</span> <span class="level13c">{</span>
+                page--;
+                selected = page * ENTRIES_PER_PAGE;
+            <span class="level13c">}</span>
+
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_JUMP<span class="level14c">)</span> <span class="level14c">{</span>
+
+            echo<span class="level13c">()</span>;
+            <span class="Type">char</span> num_str<span class="level13c">[</span><span class="Number">10</span><span class="level13c">]</span>;
+            mvprintw<span class="level13c">(</span>LINES - <span class="Number">3</span>, <span class="Number">0</span>, <span class="String">&quot;Jump to line: &quot;</span><span class="level13c">)</span>;
+
+            getnstr<span class="level13c">(</span>num_str, <span class="Operator">sizeof</span><span class="level12c">(</span>num_str<span class="level12c">)</span> - <span class="Number">1</span><span class="level13c">)</span>;
+            noecho<span class="level13c">()</span>;
+
+            <span class="Type">int</span> jump = atoi<span class="level13c">(</span>num_str<span class="level13c">)</span>;
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>jump &gt;= <span class="Number">0</span> &amp;&amp; jump &lt; num_entries<span class="level13c">)</span> <span class="level13c">{</span>
+
+                selected = jump;
+                page = jump / ENTRIES_PER_PAGE;
+            <span class="level13c">}</span>
+
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_SEARCH_1 || ch == KEY_SEARCH_2<span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Type">char</span> search_query<span class="level13c">[</span><span class="Number">256</span><span class="level13c">]</span> = <span class="level13c">{</span><span class="Number">0</span><span class="level13c">}</span>;
+            prompt_input<span class="level13c">(</span><span class="String">&quot;Search: &quot;</span>, search_query, <span class="Operator">sizeof</span><span class="level12c">(</span>search_query<span class="level12c">)</span><span class="level13c">)</span>;
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>strlen<span class="level12c">(</span>search_query<span class="level12c">)</span> &gt; <span class="Number">0</span><span class="level13c">)</span> <span class="level13c">{</span>
+
+                <span class="Type">int</span> found = <span class="Number">0</span>;
+
+                <span class="Repeat">for</span> <span class="level12c">(</span><span class="Type">int</span> i = <span class="Number">0</span>; i &lt; num_entries; i++<span class="level12c">)</span> <span class="level12c">{</span>
+                    <span class="Comment">/*</span><span class="Comment"> this is slow </span><span class="Comment">*/</span>
+                    <span class="Conditional">if</span> <span class="level11c">(</span>strcasestr<span class="level10c">(</span>entries<span class="level9c">[</span>i<span class="level9c">]</span>-&gt;fname, search_query<span class="level10c">)</span> != <span class="Constant">NULL</span><span class="level11c">)</span> <span class="level11c">{</span>
+                        selected = i;
+                        page = i / ENTRIES_PER_PAGE;
+                        found = <span class="Number">1</span>;
+                        <span class="Statement">break</span>;
+                    <span class="level11c">}</span>
+                <span class="level12c">}</span>
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>!found<span class="level12c">)</span> <span class="level12c">{</span>
+
+                    show_message<span class="level11c">(</span><span class="String">&quot;No matching file found. Press any key.&quot;</span><span class="level11c">)</span>;
+                <span class="level12c">}</span>
+            <span class="level13c">}</span>
+
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == <span class="SpecialChar">'\n'</span><span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Conditional">if</span> <span class="level13c">(</span><span class="level12c">(</span>entries<span class="level11c">[</span>selected<span class="level11c">]</span>-&gt;type == file_dir<span class="level12c">)</span> ||
+                <span class="level12c">(</span>strcmp<span class="level11c">(</span>entries<span class="level10c">[</span>selected<span class="level10c">]</span>-&gt;fname, <span class="String">&quot;../&quot;</span><span class="level11c">)</span> == <span class="Number">0</span><span class="level12c">)</span><span class="level13c">)</span> <span class="level13c">{</span>
+                <span class="Type">char</span> new_path<span class="level12c">[</span><span class="Number">1024</span><span class="level12c">]</span>;
+                <span class="Type">int</span> ret2 = snprintf<span class="level12c">(</span>new_path, <span class="Operator">sizeof</span><span class="level11c">(</span>new_path<span class="level11c">)</span>, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">/</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, current_path, entries<span class="level11c">[</span>selected<span class="level11c">]</span>-&gt;fname<span class="level12c">)</span>;
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>ret2 &lt; <span class="Number">0</span> || <span class="level11c">(</span><span class="Type">size_t</span><span class="level11c">)</span>ret2 &gt;= <span class="Operator">sizeof</span><span class="level11c">(</span>new_path<span class="level11c">)</span><span class="level12c">)</span> <span class="level12c">{</span>
+
+                    new_path<span class="level11c">[</span><span class="Operator">sizeof</span><span class="level10c">(</span>new_path<span class="level10c">)</span> - <span class="Number">1</span><span class="level11c">]</span> = <span class="SpecialChar">'\0'</span>;
+                <span class="level12c">}</span>
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>chdir<span class="level11c">(</span>new_path<span class="level11c">)</span> == <span class="Number">0</span><span class="level12c">)</span> <span class="level12c">{</span>
+
+                    <span class="Conditional">if</span> <span class="level11c">(</span>realpath<span class="level10c">(</span><span class="String">&quot;.&quot;</span>, current_path<span class="level10c">)</span> == <span class="Constant">NULL</span><span class="level11c">)</span> <span class="level11c">{</span>
+
+                        perror<span class="level10c">(</span><span class="String">&quot;realpath&quot;</span><span class="level10c">)</span>;
+                        <span class="Statement">break</span>;
+                    <span class="level11c">}</span>
+
+                    free_ls_entries<span class="level11c">(</span>entries, num_entries<span class="level11c">)</span>;
+                    num_entries = load_ls_entries<span class="level11c">(</span>current_path, &amp;entries<span class="level11c">)</span>;
+
+                    <span class="Conditional">if</span> <span class="level11c">(</span>selected &gt;= num_entries<span class="level11c">)</span> <span class="level11c">{</span>
+                        selected = num_entries - <span class="Number">1</span>;
+                    <span class="level11c">}</span>
+
+                    page = selected / ENTRIES_PER_PAGE;
+                <span class="level12c">}</span>
+
+            <span class="level13c">}</span> <span class="Conditional">else</span> <span class="level13c">{</span>
+
+                <span class="Type">char</span> *ext = strrchr<span class="level12c">(</span>entries<span class="level11c">[</span>selected<span class="level11c">]</span>-&gt;fname, <span class="Character">'.'</span><span class="level12c">)</span>;
+
+                <span class="Type">char</span> command<span class="level12c">[</span><span class="Number">1024</span><span class="level12c">]</span>;
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>entries<span class="level11c">[</span>selected<span class="level11c">]</span>-&gt;type == file_exec<span class="level12c">)</span> <span class="level12c">{</span>
+
+                    <span class="Type">char</span> exec_path<span class="level11c">[</span><span class="Number">2048</span><span class="level11c">]</span>;
+
+                    snprintf<span class="level11c">(</span>exec_path, <span class="Operator">sizeof</span><span class="level10c">(</span>exec_path<span class="level10c">)</span>, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">/</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, current_path, entries<span class="level10c">[</span>selected<span class="level10c">]</span>-&gt;fname<span class="level11c">)</span>;
+                    run_executable<span class="level11c">(</span>exec_path<span class="level11c">)</span>;
+
+                <span class="level12c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level12c">(</span><span class="level11c">(</span>ext &amp;&amp; strcasecmp<span class="level10c">(</span>ext, <span class="String">&quot;.png&quot;</span><span class="level10c">)</span> == <span class="Number">0</span><span class="level11c">)</span> ||
+                           <span class="level11c">(</span>ext &amp;&amp; strcasecmp<span class="level10c">(</span>ext, <span class="String">&quot;.jpeg&quot;</span><span class="level10c">)</span> == <span class="Number">0</span><span class="level11c">)</span> ||
+                           <span class="level11c">(</span>ext &amp;&amp; strcasecmp<span class="level10c">(</span>ext, <span class="String">&quot;.jpg&quot;</span><span class="level10c">)</span> == <span class="Number">0</span><span class="level11c">)</span> ||
+                           <span class="level11c">(</span>ext &amp;&amp; strcasecmp<span class="level10c">(</span>ext, <span class="String">&quot;.gif&quot;</span><span class="level10c">)</span> == <span class="Number">0</span><span class="level11c">)</span><span class="level12c">)</span> <span class="level12c">{</span>
+
+                    snprintf<span class="level11c">(</span>command, <span class="Operator">sizeof</span><span class="level10c">(</span>command<span class="level10c">)</span>, IMAGE_VIEWER_COMMAND, entries<span class="level10c">[</span>selected<span class="level10c">]</span>-&gt;fname<span class="level11c">)</span>;
+                    run_executable<span class="level11c">(</span>command<span class="level11c">)</span>;
+                <span class="level12c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level12c">(</span><span class="level11c">(</span>ext &amp;&amp; strcasecmp<span class="level10c">(</span>ext, <span class="String">&quot;.mp4&quot;</span><span class="level10c">)</span> == <span class="Number">0</span><span class="level11c">)</span> ||
+                           <span class="level11c">(</span>ext &amp;&amp; strcasecmp<span class="level10c">(</span>ext, <span class="String">&quot;.mov&quot;</span><span class="level10c">)</span><span class="level11c">)</span> == <span class="Number">0</span><span class="level12c">)</span> <span class="level12c">{</span>
+
+                    snprintf<span class="level11c">(</span>command, <span class="Operator">sizeof</span><span class="level10c">(</span>command<span class="level10c">)</span>, VIDEO_PLAYER_COMMAND, entries<span class="level10c">[</span>selected<span class="level10c">]</span>-&gt;fname<span class="level11c">)</span>;
+                    run_executable<span class="level11c">(</span>command<span class="level11c">)</span>;
+                <span class="level12c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level12c">(</span><span class="level11c">(</span>ext &amp;&amp; strcasecmp<span class="level10c">(</span>ext, <span class="String">&quot;.mp3&quot;</span><span class="level10c">)</span><span class="level11c">)</span> == <span class="Number">0</span> ||
+                           <span class="level11c">(</span>ext &amp;&amp; strcasecmp<span class="level10c">(</span>ext, <span class="String">&quot;.ogg&quot;</span><span class="level10c">)</span><span class="level11c">)</span> == <span class="Number">0</span> ||
+                           <span class="level11c">(</span>ext &amp;&amp; strcasecmp<span class="level10c">(</span>ext, <span class="String">&quot;.wav&quot;</span><span class="level10c">)</span><span class="level11c">)</span> == <span class="Number">0</span><span class="level12c">)</span> <span class="level12c">{</span>
+
+                    snprintf<span class="level11c">(</span>command, <span class="Operator">sizeof</span><span class="level10c">(</span>command<span class="level10c">)</span>, AUDIO_PLAYER_COMMAND, entries<span class="level10c">[</span>selected<span class="level10c">]</span>-&gt;fname<span class="level11c">)</span>;
+                    run_executable<span class="level11c">(</span>command<span class="level11c">)</span>;
+                <span class="level12c">}</span> <span class="Conditional">else</span> <span class="level12c">{</span>
+
+                    <span class="Comment">/*</span><span class="Comment"> fallback </span><span class="Comment">*/</span>
+                    snprintf<span class="level11c">(</span>command, <span class="Operator">sizeof</span><span class="level10c">(</span>command<span class="level10c">)</span>, <span class="String">&quot;xdg-open </span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, entries<span class="level10c">[</span>selected<span class="level10c">]</span>-&gt;fname<span class="level11c">)</span>;
+                    run_executable<span class="level11c">(</span>command<span class="level11c">)</span>;
+                <span class="level12c">}</span>
+
+                free_ls_entries<span class="level12c">(</span>entries, num_entries<span class="level12c">)</span>;
+                num_entries = load_ls_entries<span class="level12c">(</span>current_path, &amp;entries<span class="level12c">)</span>;
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>selected &gt;= num_entries<span class="level12c">)</span>
+                    selected = num_entries - <span class="Number">1</span>;
+
+                page = selected / ENTRIES_PER_PAGE;
+            <span class="level13c">}</span>
+
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_RENAME_1 || ch == KEY_RENAME_2<span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Type">char</span> new_name<span class="level13c">[</span><span class="Number">256</span><span class="level13c">]</span> = <span class="level13c">{</span><span class="Number">0</span><span class="level13c">}</span>;
+
+            prompt_input<span class="level13c">(</span><span class="String">&quot;Rename file: &quot;</span>, new_name, <span class="Operator">sizeof</span><span class="level12c">(</span>new_name<span class="level12c">)</span><span class="level13c">)</span>;
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>strlen<span class="level12c">(</span>new_name<span class="level12c">)</span> &gt; <span class="Number">0</span><span class="level13c">)</span> <span class="level13c">{</span>
+
+                <span class="Type">char</span> old_filename<span class="level12c">[</span><span class="Number">512</span><span class="level12c">]</span>;
+                strncpy<span class="level12c">(</span>old_filename, entries<span class="level11c">[</span>selected<span class="level11c">]</span>-&gt;fname, <span class="Operator">sizeof</span><span class="level11c">(</span>old_filename<span class="level11c">)</span><span class="level12c">)</span>;
+                old_filename<span class="level12c">[</span><span class="Operator">sizeof</span><span class="level11c">(</span>old_filename<span class="level11c">)</span> - <span class="Number">1</span><span class="level12c">]</span> = <span class="SpecialChar">'\0'</span>;
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>entries<span class="level11c">[</span>selected<span class="level11c">]</span>-&gt;type == file_exec<span class="level12c">)</span> <span class="level12c">{</span>
+
+                    <span class="Type">size_t</span> len = strlen<span class="level11c">(</span>old_filename<span class="level11c">)</span>;
+
+                    <span class="Conditional">if</span> <span class="level11c">(</span>len &gt; <span class="Number">0</span> &amp;&amp; old_filename<span class="level10c">[</span>len - <span class="Number">1</span><span class="level10c">]</span> == <span class="Character">'*'</span><span class="level11c">)</span> <span class="level11c">{</span>
+
+                        old_filename<span class="level10c">[</span>len - <span class="Number">1</span><span class="level10c">]</span> = <span class="SpecialChar">'\0'</span>;
+                    <span class="level11c">}</span>
+                <span class="level12c">}</span>
+
+                <span class="Type">char</span> confirm_msg<span class="level12c">[</span><span class="Number">512</span><span class="level12c">]</span>;
+                <span class="Type">int</span> ret = snprintf<span class="level12c">(</span>confirm_msg, <span class="Operator">sizeof</span><span class="level11c">(</span>confirm_msg<span class="level11c">)</span>,
+                                   <span class="String">&quot;Rename '</span><span class="SpecialChar">%.50s</span><span class="String">' to '</span><span class="SpecialChar">%.50s</span><span class="String">'?&quot;</span>, old_filename, new_name<span class="level12c">)</span>;
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>ret &lt; <span class="Number">0</span> || <span class="level11c">(</span><span class="Type">size_t</span><span class="level11c">)</span>ret &gt;= <span class="Operator">sizeof</span><span class="level11c">(</span>confirm_msg<span class="level11c">)</span><span class="level12c">)</span> <span class="level12c">{</span>
+                    confirm_msg<span class="level11c">[</span><span class="Operator">sizeof</span><span class="level10c">(</span>confirm_msg<span class="level10c">)</span> - <span class="Number">1</span><span class="level11c">]</span> = <span class="SpecialChar">'\0'</span>;
+                <span class="level12c">}</span>
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>confirm_box<span class="level11c">(</span>confirm_msg<span class="level11c">)</span><span class="level12c">)</span> <span class="level12c">{</span>
+
+                    <span class="Type">char</span> old_path<span class="level11c">[</span><span class="Number">1024</span><span class="level11c">]</span>, new_path<span class="level11c">[</span><span class="Number">1024</span><span class="level11c">]</span>;
+                    <span class="Type">int</span> ret4 = snprintf<span class="level11c">(</span>old_path, <span class="Operator">sizeof</span><span class="level10c">(</span>old_path<span class="level10c">)</span>, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">/</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, current_path, old_filename<span class="level11c">)</span>;
+
+                    <span class="Conditional">if</span> <span class="level11c">(</span>ret4 &lt; <span class="Number">0</span> || <span class="level10c">(</span><span class="Type">size_t</span><span class="level10c">)</span>ret4 &gt;= <span class="Operator">sizeof</span><span class="level10c">(</span>old_path<span class="level10c">)</span><span class="level11c">)</span> <span class="level11c">{</span>
+
+                        old_path<span class="level10c">[</span><span class="Operator">sizeof</span><span class="level9c">(</span>old_path<span class="level9c">)</span> - <span class="Number">1</span><span class="level10c">]</span> = <span class="SpecialChar">'\0'</span>;
+                    <span class="level11c">}</span>
+
+                    <span class="Type">int</span> ret5 = snprintf<span class="level11c">(</span>new_path, <span class="Operator">sizeof</span><span class="level10c">(</span>new_path<span class="level10c">)</span>, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">/</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, current_path, new_name<span class="level11c">)</span>;
+
+                    <span class="Conditional">if</span> <span class="level11c">(</span>ret5 &lt; <span class="Number">0</span> || <span class="level10c">(</span><span class="Type">size_t</span><span class="level10c">)</span>ret5 &gt;= <span class="Operator">sizeof</span><span class="level10c">(</span>new_path<span class="level10c">)</span><span class="level11c">)</span> <span class="level11c">{</span>
+
+                        new_path<span class="level10c">[</span><span class="Operator">sizeof</span><span class="level9c">(</span>new_path<span class="level9c">)</span> - <span class="Number">1</span><span class="level10c">]</span> = <span class="SpecialChar">'\0'</span>;
+                    <span class="level11c">}</span>
+
+                    <span class="Conditional">if</span> <span class="level11c">(</span>rename<span class="level10c">(</span>old_path, new_path<span class="level10c">)</span> == <span class="Number">0</span><span class="level11c">)</span> <span class="level11c">{</span>
+
+                        snprintf<span class="level10c">(</span>last_action, LAST_ACTION_SIZE, <span class="String">&quot;Renamed '</span><span class="SpecialChar">%.50s</span><span class="String">' to '</span><span class="SpecialChar">%.50s</span><span class="String">'&quot;</span>, old_filename, new_name<span class="level10c">)</span>;
+                        free_ls_entries<span class="level10c">(</span>entries, num_entries<span class="level10c">)</span>;
+
+                        num_entries = load_ls_entries<span class="level10c">(</span>current_path, &amp;entries<span class="level10c">)</span>;
+
+                        <span class="Conditional">if</span> <span class="level10c">(</span>selected &gt;= num_entries<span class="level10c">)</span>
+                            selected = num_entries - <span class="Number">1</span>;
+
+                        page = selected / ENTRIES_PER_PAGE;
+                    <span class="level11c">}</span>
+                <span class="level12c">}</span>
+            <span class="level13c">}</span>
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_DELETE_1 || ch == KEY_DELETE_2<span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>confirm_box<span class="level12c">(</span><span class="String">&quot;Confirm delete?&quot;</span><span class="level12c">)</span><span class="level13c">)</span> <span class="level13c">{</span>
+
+                <span class="Type">char</span> del_path<span class="level12c">[</span><span class="Number">2048</span><span class="level12c">]</span>;
+                snprintf<span class="level12c">(</span>del_path, <span class="Operator">sizeof</span><span class="level11c">(</span>del_path<span class="level11c">)</span>, <span class="String">&quot;</span><span class="SpecialChar">%s</span><span class="String">/</span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, current_path, entries<span class="level11c">[</span>selected<span class="level11c">]</span>-&gt;fname<span class="level12c">)</span>;
+
+                trim_executable_mark<span class="level12c">(</span>del_path<span class="level12c">)</span>;
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>remove<span class="level11c">(</span>del_path<span class="level11c">)</span> == <span class="Number">0</span><span class="level12c">)</span> <span class="level12c">{</span>
+                    snprintf<span class="level11c">(</span>last_action, LAST_ACTION_SIZE, <span class="String">&quot;Deleted '</span><span class="SpecialChar">%.50s</span><span class="String">'&quot;</span>, entries<span class="level10c">[</span>selected<span class="level10c">]</span>-&gt;fname<span class="level11c">)</span>;
+
+                    free_ls_entries<span class="level11c">(</span>entries, num_entries<span class="level11c">)</span>;
+                    num_entries = load_ls_entries<span class="level11c">(</span>current_path, &amp;entries<span class="level11c">)</span>;
+
+                    <span class="Conditional">if</span> <span class="level11c">(</span>selected &gt;= num_entries<span class="level11c">)</span>
+                        selected = num_entries - <span class="Number">1</span>;
+
+                    page = selected / ENTRIES_PER_PAGE;
+
+                <span class="level12c">}</span> <span class="Conditional">else</span> <span class="level12c">{</span>
+                    endwin<span class="level11c">()</span>;
+                    printf<span class="level11c">(</span><span class="String">&quot;path sent</span><span class="SpecialChar">%s</span><span class="SpecialChar">\n</span><span class="String">&quot;</span>, del_path<span class="level11c">)</span>;
+                    perror<span class="level11c">(</span><span class="String">&quot;remove()</span><span class="SpecialChar">\n</span><span class="String">&quot;</span><span class="level11c">)</span>;
+                <span class="level12c">}</span>
+            <span class="level13c">}</span>
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_RUN_CMD<span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Type">char</span> cmd<span class="level13c">[</span><span class="Number">256</span><span class="level13c">]</span> = <span class="level13c">{</span><span class="Number">0</span><span class="level13c">}</span>;
+            prompt_input<span class="level13c">(</span><span class="String">&quot;Run command: &quot;</span>, cmd, <span class="Operator">sizeof</span><span class="level12c">(</span>cmd<span class="level12c">)</span><span class="level13c">)</span>;
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>strlen<span class="level12c">(</span>cmd<span class="level12c">)</span> &gt; <span class="Number">0</span><span class="level13c">)</span> <span class="level13c">{</span>
+
+                <span class="Type">int</span> status = system<span class="level12c">(</span>cmd<span class="level12c">)</span>;
+                snprintf<span class="level12c">(</span>last_action, LAST_ACTION_SIZE, <span class="String">&quot;Ran '</span><span class="SpecialChar">%.50s</span><span class="String">' (status </span><span class="SpecialChar">%d</span><span class="String">)&quot;</span>, cmd, status<span class="level12c">)</span>;
+                free_ls_entries<span class="level12c">(</span>entries, num_entries<span class="level12c">)</span>;
+                num_entries = load_ls_entries<span class="level12c">(</span>current_path, &amp;entries<span class="level12c">)</span>;
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>selected &gt;= num_entries<span class="level12c">)</span>
+                    selected = num_entries - <span class="Number">1</span>;
+
+                page = selected / ENTRIES_PER_PAGE;
+            <span class="level13c">}</span>
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_MKDIR<span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Type">char</span> dir_name<span class="level13c">[</span><span class="Number">256</span><span class="level13c">]</span> = <span class="level13c">{</span><span class="Number">0</span><span class="level13c">}</span>;
+            prompt_input<span class="level13c">(</span><span class="String">&quot;mkdir: &quot;</span>, dir_name, <span class="Operator">sizeof</span><span class="level12c">(</span>dir_name<span class="level12c">)</span><span class="level13c">)</span>;
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>strlen<span class="level12c">(</span>dir_name<span class="level12c">)</span> &gt; <span class="Number">0</span><span class="level13c">)</span> <span class="level13c">{</span>
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>mkdir<span class="level11c">(</span>dir_name, <span class="Number">0755</span><span class="level11c">)</span> == <span class="Number">0</span><span class="level12c">)</span> <span class="level12c">{</span>
+
+                    snprintf<span class="level11c">(</span>last_action, LAST_ACTION_SIZE, <span class="String">&quot;Created directory '</span><span class="SpecialChar">%s</span><span class="String">'&quot;</span>, dir_name<span class="level11c">)</span>;
+
+                <span class="level12c">}</span> <span class="Conditional">else</span> <span class="level12c">{</span>
+
+                    snprintf<span class="level11c">(</span>last_action, LAST_ACTION_SIZE, <span class="String">&quot;mkdir failed for '</span><span class="SpecialChar">%s</span><span class="String">'&quot;</span>, dir_name<span class="level11c">)</span>;
+                <span class="level12c">}</span>
+
+                free_ls_entries<span class="level12c">(</span>entries, num_entries<span class="level12c">)</span>;
+                num_entries = load_ls_entries<span class="level12c">(</span>current_path, &amp;entries<span class="level12c">)</span>;
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>selected &gt;= num_entries<span class="level12c">)</span>
+                    selected = num_entries - <span class="Number">1</span>;
+
+                page = selected / ENTRIES_PER_PAGE;
+            <span class="level13c">}</span>
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_TOUCH<span class="level14c">)</span> <span class="level14c">{</span>
+            <span class="Type">char</span> file_name<span class="level13c">[</span><span class="Number">256</span><span class="level13c">]</span> = <span class="level13c">{</span><span class="Number">0</span><span class="level13c">}</span>;
+            prompt_input<span class="level13c">(</span><span class="String">&quot;Touch: &quot;</span>, file_name, <span class="Operator">sizeof</span><span class="level12c">(</span>file_name<span class="level12c">)</span><span class="level13c">)</span>;
+            <span class="Conditional">if</span> <span class="level13c">(</span>strlen<span class="level12c">(</span>file_name<span class="level12c">)</span> &gt; <span class="Number">0</span><span class="level13c">)</span> <span class="level13c">{</span>
+
+                <span class="Type">int</span> fd = open<span class="level12c">(</span>file_name, O_CREAT | O_WRONLY, <span class="Number">0644</span><span class="level12c">)</span>;
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>fd != -<span class="Number">1</span><span class="level12c">)</span> <span class="level12c">{</span>
+
+                    close<span class="level11c">(</span>fd<span class="level11c">)</span>;
+                    snprintf<span class="level11c">(</span>last_action, LAST_ACTION_SIZE, <span class="String">&quot;Created file '</span><span class="SpecialChar">%s</span><span class="String">'&quot;</span>, file_name<span class="level11c">)</span>;
+
+                <span class="level12c">}</span> <span class="Conditional">else</span> <span class="level12c">{</span>
+
+                    snprintf<span class="level11c">(</span>last_action, LAST_ACTION_SIZE, <span class="String">&quot;Touch failed for '</span><span class="SpecialChar">%s</span><span class="String">'&quot;</span>, file_name<span class="level11c">)</span>;
+                <span class="level12c">}</span>
+
+                free_ls_entries<span class="level12c">(</span>entries, num_entries<span class="level12c">)</span>;
+                num_entries = load_ls_entries<span class="level12c">(</span>current_path, &amp;entries<span class="level12c">)</span>;
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>selected &gt;= num_entries<span class="level12c">)</span>
+                    selected = num_entries - <span class="Number">1</span>;
+
+                page = selected / ENTRIES_PER_PAGE;
+            <span class="level13c">}</span>
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_RELOAD<span class="level14c">)</span> <span class="level14c">{</span>
+
+            free_ls_entries<span class="level13c">(</span>entries, num_entries<span class="level13c">)</span>;
+            num_entries = load_ls_entries<span class="level13c">(</span>current_path, &amp;entries<span class="level13c">)</span>;
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>selected &gt;= num_entries<span class="level13c">)</span>
+                selected = num_entries - <span class="Number">1</span>;
+
+            page = selected / ENTRIES_PER_PAGE;
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_GO_UP<span class="level14c">)</span> <span class="level14c">{</span>
+            <span class="Conditional">if</span> <span class="level13c">(</span>chdir<span class="level12c">(</span><span class="String">&quot;..&quot;</span><span class="level12c">)</span> == <span class="Number">0</span><span class="level13c">)</span> <span class="level13c">{</span>
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>realpath<span class="level11c">(</span><span class="String">&quot;.&quot;</span>, current_path<span class="level11c">)</span> == <span class="Constant">NULL</span><span class="level12c">)</span> <span class="level12c">{</span>
+
+                    perror<span class="level11c">(</span><span class="String">&quot;realpath&quot;</span><span class="level11c">)</span>;
+                    <span class="Statement">break</span>;
+                <span class="level12c">}</span>
+
+                free_ls_entries<span class="level12c">(</span>entries, num_entries<span class="level12c">)</span>;
+                num_entries = load_ls_entries<span class="level12c">(</span>current_path, &amp;entries<span class="level12c">)</span>;
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>selected &gt;= num_entries<span class="level12c">)</span>
+                    selected = num_entries - <span class="Number">1</span>;
+
+                page = selected / ENTRIES_PER_PAGE;
+            <span class="level13c">}</span>
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_TERM_OPEN<span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>entries<span class="level12c">[</span>selected<span class="level12c">]</span>-&gt;type == file_exec<span class="level13c">)</span> <span class="level13c">{</span>
+
+                <span class="Type">char</span> command<span class="level12c">[</span><span class="Number">2048</span><span class="level12c">]</span>;
+
+                snprintf<span class="level12c">(</span>command, <span class="Operator">sizeof</span><span class="level11c">(</span>command<span class="level11c">)</span>, TERM_OPEN_COMMAND, entries<span class="level11c">[</span>selected<span class="level11c">]</span>-&gt;fname<span class="level12c">)</span>;
+                run_executable<span class="level12c">(</span>command<span class="level12c">)</span>;
+
+                free_ls_entries<span class="level12c">(</span>entries, num_entries<span class="level12c">)</span>;
+                num_entries = load_ls_entries<span class="level12c">(</span>current_path, &amp;entries<span class="level12c">)</span>;
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>selected &gt;= num_entries<span class="level12c">)</span>
+                    selected = num_entries - <span class="Number">1</span>;
+
+                page = selected / ENTRIES_PER_PAGE;
+
+            <span class="level13c">}</span>
+
+            <span class="Conditional">else</span> <span class="level13c">{</span>
+                show_message<span class="level12c">(</span><span class="String">&quot;File must be executable.&quot;</span><span class="level12c">)</span>;
+            <span class="level13c">}</span>
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_OPEN_LOCATION<span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Type">char</span> command<span class="level13c">[</span><span class="Number">2048</span><span class="level13c">]</span>;
+
+            snprintf<span class="level13c">(</span>command, <span class="Operator">sizeof</span><span class="level12c">(</span>command<span class="level12c">)</span>, TERM_OPEN_LOCATION_COMMAND <span class="String">&quot; &gt; /dev/null 2&gt;&amp;1 &amp;&quot;</span>, current_path<span class="level13c">)</span>;
+            run_silent<span class="level13c">(</span>command<span class="level13c">)</span>;
+
+        <span class="level14c">}</span> <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_SHOW_HELP<span class="level14c">)</span> <span class="level14c">{</span>
+
+            show_help<span class="level13c">()</span>;
+        <span class="level14c">}</span>
+
+        <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_COPY_PATH<span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Type">char</span> command<span class="level13c">[</span><span class="Number">2048</span><span class="level13c">]</span>;
+
+            snprintf<span class="level13c">(</span>command, <span class="Operator">sizeof</span><span class="level12c">(</span>command<span class="level12c">)</span>, CLIPBOARD_COMMAND, current_path<span class="level13c">)</span>;
+            run_silent<span class="level13c">(</span>command<span class="level13c">)</span>;
+
+            snprintf<span class="level13c">(</span>last_action, LAST_ACTION_SIZE, <span class="String">&quot;Copied '</span><span class="SpecialChar">%s</span><span class="String">' (current path) in to clipboard.&quot;</span>, current_path<span class="level13c">)</span>;
+        <span class="level14c">}</span>
+
+        <span class="Conditional">else</span> <span class="Conditional">if</span> <span class="level14c">(</span>ch == KEY_GOTO_PATH<span class="level14c">)</span> <span class="level14c">{</span>
+
+            <span class="Type">char</span> new_path<span class="level13c">[</span><span class="Number">1024</span><span class="level13c">]</span>;
+
+            prompt_input<span class="level13c">(</span><span class="String">&quot;Go to: &quot;</span>, new_path, <span class="Operator">sizeof</span><span class="level12c">(</span>new_path<span class="level12c">)</span><span class="level13c">)</span>;
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>strcmp<span class="level12c">(</span>new_path, <span class="String">&quot;~&quot;</span><span class="level12c">)</span> == <span class="Number">0</span><span class="level13c">)</span> <span class="level13c">{</span>
+                snprintf<span class="level12c">(</span>new_path, <span class="Operator">sizeof</span><span class="level11c">(</span>new_path<span class="level11c">)</span>, CUSTOM_HOME_PATH<span class="level12c">)</span>;
+            <span class="level13c">}</span>
+
+            <span class="Conditional">if</span> <span class="level13c">(</span>chdir<span class="level12c">(</span>new_path<span class="level12c">)</span> == <span class="Number">0</span><span class="level13c">)</span> <span class="level13c">{</span>
+
+                <span class="Conditional">if</span> <span class="level12c">(</span>realpath<span class="level11c">(</span><span class="String">&quot;.&quot;</span>, current_path<span class="level11c">)</span> == <span class="Constant">NULL</span><span class="level12c">)</span> <span class="level12c">{</span>
+
+                    perror<span class="level11c">(</span><span class="String">&quot;realpath&quot;</span><span class="level11c">)</span>;
+                    <span class="Statement">break</span>;
+                <span class="level12c">}</span>
+
+                free_ls_entries<span class="level12c">(</span>entries, num_entries<span class="level12c">)</span>;
+                num_entries = load_ls_entries<span class="level12c">(</span>current_path, &amp;entries<span class="level12c">)</span>;
+            <span class="level13c">}</span>
+
+            snprintf<span class="level13c">(</span>last_action, LAST_ACTION_SIZE, <span class="String">&quot;Moved to </span><span class="SpecialChar">%s</span><span class="String">&quot;</span>, new_path<span class="level13c">)</span>;
+        <span class="level14c">}</span>
+    <span class="level15c">}</span>
+
+    free_ls_entries<span class="level15c">(</span>entries, num_entries<span class="level15c">)</span>;
+    endwin<span class="level15c">()</span>;
+    <span class="Statement">return</span> <span class="Number">0</span>;
+<span class="level16c">}</span>
+</pre>
+</body>
+</html>
+<!-- vim: set foldmethod=manual : -->
