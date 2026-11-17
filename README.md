@@ -1,3 +1,11 @@
+# Projeto movido
+
+Esta é a primeira parte do projeto, futuras partes foram movidas para [github.com/aprenderC](https://github.com/aprenderC)
+por motivos de
+- URL
+- Organização
+- Mais facil arquivamento das verções anteriores do projeto
+
 # aprenderC
 
 ## Projeto de atividade extencionista Uninter Ciência da computação 1º ano
